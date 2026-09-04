@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+vendor/
+.phpunit.cache/
+coverage/
+runtime/
+storage/incoming/*
+storage/processed/*
+storage/quarantine/*
+!storage/incoming/.gitkeep
+!storage/processed/.gitkeep
+!storage/quarantine/.gitkeep

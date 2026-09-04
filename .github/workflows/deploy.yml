@@ -1,0 +1,117 @@
+name: Deploy over SFTP
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      KVS_AVATAR_ROOT: ${{ secrets.KVS_AVATAR_ROOT }}
+      MODERATOR_STORAGE_ROOT: ${{ secrets.MODERATOR_STORAGE_ROOT }}
+      KVS_HOOK_SECRET: ${{ secrets.KVS_HOOK_SECRET }}
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Validate deployment settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in OPENAI_API_KEY SSH_HOST SSH_PORT SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_PATH KVS_AVATAR_ROOT MODERATOR_STORAGE_ROOT KVS_HOOK_SECRET; do
+            [[ -n "${!name:-}" ]] || { echo "Missing production secret: $name" >&2; exit 1; }
+          done
+          [[ "$SSH_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "Invalid SSH_HOST" >&2; exit 1; }
+          [[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]] || { echo "Invalid SSH_PORT" >&2; exit 1; }
+          [[ "$SSH_USER" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid SSH_USER" >&2; exit 1; }
+          [[ "$DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "Invalid DEPLOY_PATH" >&2; exit 1; }
+          [[ "$KVS_AVATAR_ROOT" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "Invalid KVS_AVATAR_ROOT" >&2; exit 1; }
+          [[ "$MODERATOR_STORAGE_ROOT" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "Invalid MODERATOR_STORAGE_ROOT" >&2; exit 1; }
+          (( SSH_PORT >= 1 && SSH_PORT <= 65535 )) || { echo "SSH_PORT out of range" >&2; exit 1; }
+          (( ${#KVS_HOOK_SECRET} >= 32 )) || { echo "KVS_HOOK_SECRET is too short" >&2; exit 1; }
+
+      - name: Build private release payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p .deploy
+          rsync -a \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.deploy/' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='storage/' \
+            --exclude='tests/' \
+            ./ .deploy/
+          {
+            printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY"
+            printf 'OPENAI_MODERATION_MODEL=omni-moderation-latest\n'
+            printf 'KVS_AVATAR_ROOT=%s\n' "$KVS_AVATAR_ROOT"
+            printf 'MODERATOR_STORAGE_ROOT=%s\n' "$MODERATOR_STORAGE_ROOT"
+            printf 'POLICY_VIOLATION_IMAGE=%s/current/assets/avatar-policy-violation.png\n' "$DEPLOY_PATH"
+            printf 'PENDING_REVIEW_IMAGE=%s/current/assets/avatar-under-review.png\n' "$DEPLOY_PATH"
+            printf 'KVS_HOOK_SECRET=%s\n' "$KVS_HOOK_SECRET"
+            printf 'MAX_IMAGE_BYTES=5242880\nMAX_IMAGE_DIMENSION=4096\nOUTPUT_IMAGE_SIZE=512\n'
+            printf 'BLOCK_ON_MODEL_FLAGGED=true\n'
+            printf 'BLOCKED_CATEGORIES=sexual,sexual/minors,violence,violence/graphic,self-harm,self-harm/instructions,self-harm/intent\n'
+          } > .deploy/.env
+          chmod 0600 .deploy/.env
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_deploy"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/id_deploy" "$HOME/.ssh/known_hosts"
+
+      - name: Upload immutable release over SFTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+          release="$DEPLOY_PATH/releases/$RELEASE_SHA"
+          lftp -u "$SSH_USER," "sftp://$SSH_HOST:$SSH_PORT" -e "
+            set sftp:connect-program 'ssh -a -x -i $HOME/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts';
+            mkdir -p $release;
+            mirror --reverse --parallel=4 --verbose=1 .deploy/ $release/;
+            bye
+          "
+
+      - name: Activate and verify release over SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          release="$DEPLOY_PATH/releases/$RELEASE_SHA"
+          ssh -p "$SSH_PORT" -i "$HOME/.ssh/id_deploy" \
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            "$SSH_USER@$SSH_HOST" \
+            "set -eu; test -f '$release/public/health.php'; test -f '$release/assets/avatar-policy-violation.png'; chmod 0600 '$release/.env'; mkdir -p '$MODERATOR_STORAGE_ROOT'; ln -sfn '$release' '$DEPLOY_PATH/current'; php '$DEPLOY_PATH/current/bin/lint.php'; php '$DEPLOY_PATH/current/public/health.php'"
