@@ -107,4 +107,4 @@ jobs:
             -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             "$SSH_USER@$SSH_HOST" \
-            "set -eu; test -f '$release/public/health.php'; test -f '$release/assets/avatar-policy-violation.png'; chmod 0600 '$release/.env'; mkdir -p '$MODERATOR_STORAGE_ROOT'; ln -sfn '$release' '$DEPLOY_PATH/current'; php '$DEPLOY_PATH/current/bin/lint.php'; php '$DEPLOY_PATH/current/public/health.php'"
+            "set -eu; test -f '$release/public/health.php'; test -f '$release/assets/avatar-policy-violation.png'; chgrp www-data '$release/.env'; chmod 0640 '$release/.env'; test -d '$MODERATOR_STORAGE_ROOT'; test -w '$MODERATOR_STORAGE_ROOT'; ln -sfn '$release' '$DEPLOY_PATH/current'; php '$DEPLOY_PATH/current/bin/lint.php'; php '$DEPLOY_PATH/current/public/health.php'"
