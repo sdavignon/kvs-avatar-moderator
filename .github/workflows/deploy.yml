@@ -1,10 +1,6 @@
 name: Deploy over SFTP
 
 on:
-  workflow_run:
-    workflows: [CI]
-    branches: [main]
-    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +12,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -30,11 +25,9 @@ jobs:
       KVS_AVATAR_ROOT: ${{ secrets.KVS_AVATAR_ROOT }}
       MODERATOR_STORAGE_ROOT: ${{ secrets.MODERATOR_STORAGE_ROOT }}
       KVS_HOOK_SECRET: ${{ secrets.KVS_HOOK_SECRET }}
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      RELEASE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Validate deployment settings
         shell: bash

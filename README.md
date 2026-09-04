@@ -101,6 +101,8 @@ GitHub Actions runs those checks on PHP 8.1, 8.2, and 8.3. Tests use a fake mode
 
 The `Deploy over SFTP` workflow uploads an immutable release over SFTP and switches the `current` symlink over SSH. It uses the protected GitHub environment named `production`.
 
+Run this workflow manually after all production secrets and the KVS integration path have been verified. A normal push runs CI but does not deploy automatically.
+
 Create these `production` environment secrets:
 
 - `OPENAI_API_KEY`
