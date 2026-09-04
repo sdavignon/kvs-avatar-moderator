@@ -4,28 +4,28 @@ declare(strict_types=1);
 
 namespace KvsAvatarModerator;
 
-final readonly class Config
+final class Config
 {
     /** @param list<string> $blockedCategories */
     public function __construct(
-        public string $projectRoot,
-        public string $apiKey,
-        public string $model,
-        public string $avatarRoot,
-        public string $storageRoot,
-        public string $violationImage,
-        public string $pendingImage,
-        public int $maxImageBytes,
-        public int $maxImageDimension,
-        public int $outputImageSize,
-        public int $jpegQuality,
-        public int $timeoutSeconds,
-        public int $maxRetries,
-        public int $scanLimit,
-        public bool $blockOnModelFlagged,
-        public array $blockedCategories,
-        public ?string $hookSecret,
-        public int $hookMaxClockSkew,
+        public readonly string $projectRoot,
+        public readonly string $apiKey,
+        public readonly string $model,
+        public readonly string $avatarRoot,
+        public readonly string $storageRoot,
+        public readonly string $violationImage,
+        public readonly string $pendingImage,
+        public readonly int $maxImageBytes,
+        public readonly int $maxImageDimension,
+        public readonly int $outputImageSize,
+        public readonly int $jpegQuality,
+        public readonly int $timeoutSeconds,
+        public readonly int $maxRetries,
+        public readonly int $scanLimit,
+        public readonly bool $blockOnModelFlagged,
+        public readonly array $blockedCategories,
+        public readonly ?string $hookSecret,
+        public readonly int $hookMaxClockSkew,
     ) {
     }
 

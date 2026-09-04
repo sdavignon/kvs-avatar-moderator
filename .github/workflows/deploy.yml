@@ -27,7 +27,7 @@ jobs:
       KVS_HOOK_SECRET: ${{ secrets.KVS_HOOK_SECRET }}
       RELEASE_SHA: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Validate deployment settings
         shell: bash
