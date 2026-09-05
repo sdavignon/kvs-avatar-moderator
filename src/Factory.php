@@ -59,4 +59,17 @@ final class Factory
             audit: new AuditLogger($config->storageRoot),
         );
     }
+
+    public static function cachePurger(Config $config): ?CloudflareCachePurger
+    {
+        if ($config->cloudflareApiToken === null || $config->cloudflareApiToken === '' || $config->cloudflareZoneId === null || $config->cloudflareZoneId === '') {
+            return null;
+        }
+
+        return new CloudflareCachePurger(
+            apiToken: $config->cloudflareApiToken,
+            zoneId: $config->cloudflareZoneId,
+            publicBaseUrl: $config->publicBaseUrl,
+        );
+    }
 }

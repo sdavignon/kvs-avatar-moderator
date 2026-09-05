@@ -5,6 +5,7 @@ declare(strict_types=1);
 use KvsAvatarModerator\AtomicFilePublisher;
 use KvsAvatarModerator\AuditLogger;
 use KvsAvatarModerator\AvatarModerator;
+use KvsAvatarModerator\CloudflareCachePurger;
 use KvsAvatarModerator\HookAuthenticator;
 use KvsAvatarModerator\ImageNormalizer;
 use KvsAvatarModerator\ModerationClientInterface;
@@ -294,6 +295,44 @@ test('pre-upload API failure publishes a pending JPEG', static function (): void
         assertTrue((new finfo(FILEINFO_MIME_TYPE))->file($upload) === 'image/jpeg', 'pending pre-upload replacement should be JPEG');
     } finally {
         removeTree($root);
+    }
+});
+
+test('Cloudflare purger targets only the exact KVS member avatar URL', static function (): void {
+    $captured = [];
+    $purger = new CloudflareCachePurger(
+        'test-cache-purge-token',
+        str_repeat('a', 32),
+        'https://theync.com',
+        10,
+        static function (string $endpoint, string $body, array $headers, int $timeout) use (&$captured): array {
+            $captured = compact('endpoint', 'body', 'headers', 'timeout');
+            return ['status' => 200, 'body' => '{"success":true,"errors":[]}'];
+        },
+    );
+
+    $result = $purger->purgeAvatar(75378, '75000');
+    $payload = json_decode($captured['body'] ?? '', true);
+    assertTrue($result['url'] === 'https://theync.com/contents/avatars/75000/75378.jpg', 'purger should return the exact avatar URL');
+    assertTrue(($payload['files'] ?? null) === [$result['url']], 'purge request should contain only the exact avatar URL');
+    assertTrue(($captured['endpoint'] ?? '') === 'https://api.cloudflare.com/client/v4/zones/' . str_repeat('a', 32) . '/purge_cache', 'purger should use the configured zone endpoint');
+    assertTrue(in_array('Authorization: Bearer test-cache-purge-token', $captured['headers'] ?? [], true), 'purger should use bearer token authentication');
+});
+
+test('Cloudflare purger fails closed on an unsuccessful API response', static function (): void {
+    $purger = new CloudflareCachePurger(
+        'test-cache-purge-token',
+        str_repeat('b', 32),
+        'https://theync.com',
+        10,
+        static fn (): array => ['status' => 403, 'body' => '{"success":false,"errors":[{"code":10000}]}'],
+    );
+
+    try {
+        $purger->purgeAvatar(75378, '75000');
+        throw new RuntimeException('unsuccessful purge response was not rejected');
+    } catch (RuntimeException $exception) {
+        assertTrue(str_contains($exception->getMessage(), 'HTTP 403'), 'purge error should include the HTTP status');
     }
 });
 

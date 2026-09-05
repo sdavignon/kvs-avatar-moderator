@@ -12,6 +12,7 @@ Fail-closed avatar moderation for Kernel Video Sharing (KVS) 6.4.0. Every accept
 - Replaces policy violations with `assets/avatar-policy-violation.png`.
 - Replaces temporary API failures with `assets/avatar-under-review.png` and retains a private retry source.
 - Keeps originals and JSONL decision records under a private storage root.
+- Purges only the authenticated member's avatar URL from Cloudflare after KVS publishes it.
 - Supports a synchronous, HMAC-authenticated KVS hook and a cron scanner for reconciliation.
 
 ## Requirements
@@ -36,6 +37,9 @@ Important settings:
 | `KVS_HOOK_SECRET` | At least 32 random characters for signed hook requests |
 | `BLOCKED_CATEGORIES` | Moderation categories that cause replacement |
 | `BLOCK_ON_MODEL_FLAGGED` | Reject when OpenAI marks the overall result as flagged |
+| `CLOUDFLARE_API_TOKEN` | Zone-scoped token with only Cache Purge permission |
+| `CLOUDFLARE_ZONE_ID` | Cloudflare zone containing the public KVS avatar URL |
+| `PUBLIC_BASE_URL` | HTTPS site origin used to build the exact avatar purge URL |
 
 The default policy rejects sexual, violent, graphic-violent, and self-harm imagery. Because this is an avatar service for an adult site, the safest default is to reject all sexual profile images rather than attempt age estimation.
 
@@ -113,6 +117,7 @@ Create these `production` environment secrets:
 - `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`
 - `DEPLOY_PATH`, such as `/var/www/kvs-avatar-moderator`
 - `KVS_AVATAR_ROOT`, `MODERATOR_STORAGE_ROOT`, and `KVS_HOOK_SECRET`
+- `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID`
 
 The deployment writes `.env` inside the release with mode `0600`; it never uploads the local `.env.local` file.
 

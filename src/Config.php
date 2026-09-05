@@ -26,6 +26,9 @@ final class Config
         public readonly array $blockedCategories,
         public readonly ?string $hookSecret,
         public readonly int $hookMaxClockSkew,
+        public readonly ?string $cloudflareApiToken,
+        public readonly ?string $cloudflareZoneId,
+        public readonly string $publicBaseUrl,
     ) {
     }
 
@@ -67,6 +70,9 @@ final class Config
             blockedCategories: $categories,
             hookSecret: Environment::get('KVS_HOOK_SECRET'),
             hookMaxClockSkew: Environment::int('HOOK_MAX_CLOCK_SKEW_SECONDS', 300, 30, 3600),
+            cloudflareApiToken: Environment::get('CLOUDFLARE_API_TOKEN'),
+            cloudflareZoneId: Environment::get('CLOUDFLARE_ZONE_ID'),
+            publicBaseUrl: Environment::get('PUBLIC_BASE_URL', 'https://theync.com') ?? 'https://theync.com',
         );
     }
 
