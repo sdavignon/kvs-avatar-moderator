@@ -25,6 +25,8 @@ jobs:
       KVS_AVATAR_ROOT: ${{ secrets.KVS_AVATAR_ROOT }}
       MODERATOR_STORAGE_ROOT: ${{ secrets.MODERATOR_STORAGE_ROOT }}
       KVS_HOOK_SECRET: ${{ secrets.KVS_HOOK_SECRET }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
       RELEASE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v5
@@ -33,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in OPENAI_API_KEY SSH_HOST SSH_PORT SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_PATH KVS_AVATAR_ROOT MODERATOR_STORAGE_ROOT KVS_HOOK_SECRET; do
+          for name in OPENAI_API_KEY SSH_HOST SSH_PORT SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_PATH KVS_AVATAR_ROOT MODERATOR_STORAGE_ROOT KVS_HOOK_SECRET CLOUDFLARE_API_TOKEN CLOUDFLARE_ZONE_ID; do
             [[ -n "${!name:-}" ]] || { echo "Missing production secret: $name" >&2; exit 1; }
           done
           [[ "$SSH_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "Invalid SSH_HOST" >&2; exit 1; }
@@ -42,6 +44,7 @@ jobs:
           [[ "$DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "Invalid DEPLOY_PATH" >&2; exit 1; }
           [[ "$KVS_AVATAR_ROOT" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "Invalid KVS_AVATAR_ROOT" >&2; exit 1; }
           [[ "$MODERATOR_STORAGE_ROOT" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "Invalid MODERATOR_STORAGE_ROOT" >&2; exit 1; }
+          [[ "$CLOUDFLARE_ZONE_ID" =~ ^[a-f0-9]{32}$ ]] || { echo "Invalid CLOUDFLARE_ZONE_ID" >&2; exit 1; }
           (( SSH_PORT >= 1 && SSH_PORT <= 65535 )) || { echo "SSH_PORT out of range" >&2; exit 1; }
           (( ${#KVS_HOOK_SECRET} >= 32 )) || { echo "KVS_HOOK_SECRET is too short" >&2; exit 1; }
 
@@ -68,6 +71,9 @@ jobs:
             printf 'POLICY_VIOLATION_IMAGE=%s/current/assets/avatar-policy-violation.png\n' "$DEPLOY_PATH"
             printf 'PENDING_REVIEW_IMAGE=%s/current/assets/avatar-under-review.png\n' "$DEPLOY_PATH"
             printf 'KVS_HOOK_SECRET=%s\n' "$KVS_HOOK_SECRET"
+            printf 'CLOUDFLARE_API_TOKEN=%s\n' "$CLOUDFLARE_API_TOKEN"
+            printf 'CLOUDFLARE_ZONE_ID=%s\n' "$CLOUDFLARE_ZONE_ID"
+            printf 'PUBLIC_BASE_URL=https://theync.com\n'
             printf 'MAX_IMAGE_BYTES=5242880\nMAX_IMAGE_DIMENSION=4096\nOUTPUT_IMAGE_SIZE=512\n'
             printf 'BLOCK_ON_MODEL_FLAGGED=true\n'
             printf 'BLOCKED_CATEGORIES=sexual,sexual/minors,violence,violence/graphic,self-harm,self-harm/instructions,self-harm/intent\n'
@@ -108,3 +114,4 @@ jobs:
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             "$SSH_USER@$SSH_HOST" \
             "set -eu; test -f '$release/public/health.php'; test -f '$release/assets/avatar-policy-violation.png'; test -f '$release/bin/reset-opcache.php'; chgrp www-data '$release/.env'; chmod 0640 '$release/.env'; test -d '$MODERATOR_STORAGE_ROOT'; test -w '$MODERATOR_STORAGE_ROOT'; test -S '/run/php/php8.1-fpm.sock'; command -v cgi-fcgi >/dev/null; ln -sfn '$release' '$DEPLOY_PATH/current'; php '$DEPLOY_PATH/current/bin/lint.php'; php '$DEPLOY_PATH/current/public/health.php'; SCRIPT_FILENAME='$release/bin/reset-opcache.php' SCRIPT_NAME='/reset-opcache.php' REQUEST_METHOD=GET REQUEST_URI='/reset-opcache.php' SERVER_PROTOCOL='HTTP/1.1' GATEWAY_INTERFACE='CGI/1.1' REMOTE_ADDR='127.0.0.1' SERVER_ADDR='127.0.0.1' SERVER_NAME='theync.com' SERVER_PORT='80' cgi-fcgi -bind -connect '/run/php/php8.1-fpm.sock' | grep -q 'opcache-reset-complete'; curl -fsS -o /dev/null -H 'Host: theync.com' http://127.0.0.1/"
+
