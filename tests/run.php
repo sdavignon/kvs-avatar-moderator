@@ -88,6 +88,7 @@ function moderator(string $avatarRoot, string $storageRoot, array|Throwable $res
         new ImageNormalizer(5_242_880, 4096, 64, 85),
         new FakeModerationClient($response),
         new PolicyEngine(true, ['sexual', 'violence', 'violence/graphic', 'self-harm']),
+        new AtomicFilePublisher(),
         new AuditLogger($storageRoot),
     );
 }
@@ -102,7 +103,6 @@ function uploadModerator(string $storageRoot, array|Throwable $response): Upload
         new ImageNormalizer(5_242_880, 4096, 64, 85),
         new FakeModerationClient($response),
         new PolicyEngine(true, ['sexual', 'violence', 'violence/graphic', 'self-harm']),
-        new AtomicFilePublisher(),
         new AuditLogger($storageRoot),
     );
 }
