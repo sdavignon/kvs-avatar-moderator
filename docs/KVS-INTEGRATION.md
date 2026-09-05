@@ -9,6 +9,10 @@
 7. Run `bin/scan.php --baseline` once, then schedule `bin/scan.php` every minute for missed-hook reconciliation and retries.
 8. Clear the specific KVS member/profile block caches after replacement if the theme caches avatar URLs or image contents.
 
+## Wrapper routing check
+
+Inspect the rendered profile form action and the web-server rewrite that handles it before installing the prepend hook. The tested KVS 6.4.0 theme submits `/edit-profile/` asynchronously and rewrites that request to `index.php`, so the hook must be required at the start of the unencoded `index.php` wrapper. Adding it only to `member_profile_my.php` protects page-renderer posts but does not intercept this AJAX upload route.
+
 ## Acceptance test
 
 - A valid ordinary JPEG becomes a metadata-free square image and remains visible.
