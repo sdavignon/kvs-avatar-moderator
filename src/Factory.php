@@ -56,7 +56,6 @@ final class Factory
             ),
             client: $client,
             policy: new PolicyEngine($config->blockOnModelFlagged, $config->blockedCategories),
-            publisher: new AtomicFilePublisher(),
             audit: new AuditLogger($config->storageRoot),
         );
     }

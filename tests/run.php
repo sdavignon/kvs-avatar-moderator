@@ -88,7 +88,6 @@ function moderator(string $avatarRoot, string $storageRoot, array|Throwable $res
         new ImageNormalizer(5_242_880, 4096, 64, 85),
         new FakeModerationClient($response),
         new PolicyEngine(true, ['sexual', 'violence', 'violence/graphic', 'self-harm']),
-        new AtomicFilePublisher(),
         new AuditLogger($storageRoot),
     );
 }
@@ -251,10 +250,14 @@ test('pre-upload avatar is forced to a normalized JPEG', static function (): voi
     mkdir($storage, 0777, true);
     $upload = $root . '/php-upload';
     fixturePng($upload);
+    $inodeBefore = fileinode($upload);
     try {
         $result = uploadModerator($storage, moderationResponse(false, ['sexual' => false]))->moderate($upload, 1001);
+        clearstatcache(true, $upload);
+        $inodeAfter = fileinode($upload);
         $size = getimagesize($upload);
         assertTrue($result['status'] === 'approved', 'pre-upload avatar should be approved');
+        assertTrue($inodeBefore !== false && $inodeBefore === $inodeAfter, 'pre-upload rewrite must preserve the PHP upload inode');
         assertTrue((new finfo(FILEINFO_MIME_TYPE))->file($upload) === 'image/jpeg', 'pre-upload output should be JPEG');
         assertTrue(is_array($size) && $size[0] === 64 && $size[1] === 64, 'pre-upload avatar should be square');
     } finally {

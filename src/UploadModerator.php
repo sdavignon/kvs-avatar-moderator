@@ -13,7 +13,6 @@ final class UploadModerator
         private readonly ImageNormalizer $normalizer,
         private readonly ModerationClientInterface $client,
         private readonly PolicyEngine $policy,
-        private readonly AtomicFilePublisher $publisher,
         private readonly AuditLogger $audit,
     ) {
     }
@@ -36,7 +35,7 @@ final class UploadModerator
                 $quarantine = $this->quarantine($uploadPath, $userId, $sourceHash);
                 $replacement = $this->temporaryFile();
                 $this->normalizer->normalize($this->violationImage, $replacement, 'image/jpeg');
-                $this->publisher->replace($replacement, $uploadPath);
+                $this->replacePrivateUpload($replacement, $uploadPath);
                 $result = [
                     'status' => 'invalid_replaced',
                     'approved' => false,
@@ -62,7 +61,7 @@ final class UploadModerator
                 $quarantine = $this->quarantine($uploadPath, $userId, $sourceHash);
                 $replacement = $this->temporaryFile();
                 $this->normalizer->normalize($this->pendingImage, $replacement, 'image/jpeg');
-                $this->publisher->replace($replacement, $uploadPath);
+                $this->replacePrivateUpload($replacement, $uploadPath);
                 $result = [
                     'status' => 'review_required',
                     'approved' => false,
@@ -81,7 +80,7 @@ final class UploadModerator
                 $quarantine = $this->quarantine($uploadPath, $userId, $sourceHash);
                 $replacement = $this->temporaryFile();
                 $this->normalizer->normalize($this->violationImage, $replacement, 'image/jpeg');
-                $this->publisher->replace($replacement, $uploadPath);
+                $this->replacePrivateUpload($replacement, $uploadPath);
                 $result = [
                     'status' => 'violation_replaced',
                     'approved' => false,
@@ -98,7 +97,7 @@ final class UploadModerator
                 return $result;
             }
 
-            $this->publisher->replace($prepared, $uploadPath);
+            $this->replacePrivateUpload($prepared, $uploadPath);
             $result = [
                 'status' => 'approved',
                 'approved' => true,
@@ -146,6 +145,39 @@ final class UploadModerator
             throw new \RuntimeException('Unable to create temporary upload file');
         }
         return $path;
+    }
+
+    private function replacePrivateUpload(string $preparedFile, string $uploadPath): void
+    {
+        $source = fopen($preparedFile, 'rb');
+        if ($source === false) {
+            throw new \RuntimeException('Unable to open the prepared avatar');
+        }
+
+        $target = fopen($uploadPath, 'c+b');
+        if ($target === false) {
+            fclose($source);
+            throw new \RuntimeException('Unable to open the private PHP upload');
+        }
+
+        try {
+            if (!flock($target, LOCK_EX)) {
+                throw new \RuntimeException('Unable to lock the private PHP upload');
+            }
+            if (!ftruncate($target, 0) || fseek($target, 0) !== 0) {
+                throw new \RuntimeException('Unable to reset the private PHP upload');
+            }
+            $written = stream_copy_to_stream($source, $target);
+            if ($written === false || $written < 1 || !fflush($target)) {
+                throw new \RuntimeException('Unable to rewrite the private PHP upload');
+            }
+        } finally {
+            flock($target, LOCK_UN);
+            fclose($target);
+            fclose($source);
+        }
+
+        clearstatcache(true, $uploadPath);
     }
 
     private function relativeStoragePath(string $path): string
