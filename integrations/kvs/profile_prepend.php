@@ -35,9 +35,6 @@ if (!defined('KVS_AVATAR_MODERATOR_PREPROCESSED')) {
                 $isFatal = is_array($lastError) && in_array((int) ($lastError['type'] ?? 0), $fatalTypes, true);
                 $status = http_response_code();
                 $status = is_int($status) ? $status : 200;
-                if (!$isFatal && $status < 400) {
-                    return;
-                }
 
                 $auditDirectory = rtrim($config->storageRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'audit';
                 if (!is_dir($auditDirectory)) {
@@ -51,6 +48,8 @@ if (!defined('KVS_AVATAR_MODERATOR_PREPROCESSED')) {
                     'error_message' => $isFatal ? substr((string) ($lastError['message'] ?? ''), 0, 1000) : null,
                     'error_file' => $isFatal ? (string) ($lastError['file'] ?? '') : null,
                     'error_line' => $isFatal ? (int) ($lastError['line'] ?? 0) : null,
+                    'response_headers' => headers_list(),
+                    'connection_status' => connection_status(),
                     'upload_exists_at_shutdown' => is_file($temporaryPath),
                     'runtime_state' => $runtimeState,
                 ];
