@@ -10,8 +10,15 @@ require_once dirname(__DIR__, 2) . '/bootstrap.php';
 if (!defined('KVS_AVATAR_MODERATOR_PREPROCESSED')) {
     define('KVS_AVATAR_MODERATOR_PREPROCESSED', true);
 
-    $avatar = $_FILES['avatar'] ?? null;
-    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && is_array($avatar) && (int) ($avatar['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+    // KVS executes this file before its own global bootstrap. Keep every hook
+    // variable in a private scope so names such as $config cannot overwrite
+    // variables that KVS expects to define and reuse as arrays.
+    (static function (): void {
+        $avatar = $_FILES['avatar'] ?? null;
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !is_array($avatar) || (int) ($avatar['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            return;
+        }
+
         try {
             if ((int) ($avatar['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_string($avatar['tmp_name'] ?? null)) {
                 throw new RuntimeException('KVS avatar upload did not complete');
@@ -76,5 +83,5 @@ if (!defined('KVS_AVATAR_MODERATOR_PREPROCESSED')) {
             $_FILES['avatar']['tmp_name'] = '';
             $_FILES['avatar']['size'] = 0;
         }
-    }
+    })();
 }
