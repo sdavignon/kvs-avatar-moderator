@@ -34,4 +34,30 @@ final class Factory
             audit: new AuditLogger($config->storageRoot),
         );
     }
+
+    public static function uploadModerator(Config $config, ?ModerationClientInterface $client = null): UploadModerator
+    {
+        $client ??= new OpenAIModerationClient(
+            $config->apiKey,
+            $config->model,
+            $config->timeoutSeconds,
+            $config->maxRetries,
+        );
+
+        return new UploadModerator(
+            storageRoot: $config->storageRoot,
+            violationImage: $config->violationImage,
+            pendingImage: $config->pendingImage,
+            normalizer: new ImageNormalizer(
+                $config->maxImageBytes,
+                $config->maxImageDimension,
+                $config->outputImageSize,
+                $config->jpegQuality,
+            ),
+            client: $client,
+            policy: new PolicyEngine($config->blockOnModelFlagged, $config->blockedCategories),
+            publisher: new AtomicFilePublisher(),
+            audit: new AuditLogger($config->storageRoot),
+        );
+    }
 }

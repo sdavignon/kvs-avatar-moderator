@@ -69,6 +69,8 @@ The service publishes either the sanitized approved avatar, the violation avatar
 
 The exact KVS upload hook name and target-path routine are license/source-build dependent. Do not patch an encoded KVS core file or write directly to KVS database fields. Ask KVS Support for the supported pre-save extension point for your 6.4.0 build, or invoke this helper from a custom `member_profile_edit` block. `integrations/kvs/moderate_avatar.php` is also provided as a post-save compatibility hook, but it has a small exposure window and is not the preferred integration.
 
+For installations whose public `member_profile_my.php` is an unencoded wrapper, it can require `integrations/kvs/profile_prepend.php` before KVS's `process_page.php`. The preprocessor acts on PHP's private upload, forces a generated `.jpg` name, and replaces the temporary file before the encoded KVS block can publish it. Back up the wrapper and verify its exact original contents before installing this integration.
+
 Run the scanner every minute as defense in depth:
 
 ```cron

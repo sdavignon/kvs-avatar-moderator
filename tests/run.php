@@ -10,6 +10,7 @@ use KvsAvatarModerator\ImageNormalizer;
 use KvsAvatarModerator\ModerationClientInterface;
 use KvsAvatarModerator\PathGuard;
 use KvsAvatarModerator\PolicyEngine;
+use KvsAvatarModerator\UploadModerator;
 
 require dirname(__DIR__) . '/bootstrap.php';
 
@@ -81,6 +82,21 @@ function moderator(string $avatarRoot, string $storageRoot, array|Throwable $res
 {
     return new AvatarModerator(
         $avatarRoot,
+        $storageRoot,
+        dirname(__DIR__) . '/assets/avatar-policy-violation.png',
+        dirname(__DIR__) . '/assets/avatar-under-review.png',
+        new ImageNormalizer(5_242_880, 4096, 64, 85),
+        new FakeModerationClient($response),
+        new PolicyEngine(true, ['sexual', 'violence', 'violence/graphic', 'self-harm']),
+        new AtomicFilePublisher(),
+        new AuditLogger($storageRoot),
+    );
+}
+
+/** @param array<string, mixed>|Throwable $response */
+function uploadModerator(string $storageRoot, array|Throwable $response): UploadModerator
+{
+    return new UploadModerator(
         $storageRoot,
         dirname(__DIR__) . '/assets/avatar-policy-violation.png',
         dirname(__DIR__) . '/assets/avatar-under-review.png',
@@ -224,6 +240,55 @@ test('malformed image is replaced without an API call', static function (): void
         $result = moderator($avatars, $storage, moderationResponse(false))->moderate($path, $path, 999);
         assertTrue($result['status'] === 'invalid_replaced', 'malformed image should be replaced');
         assertTrue((new finfo(FILEINFO_MIME_TYPE))->file($path) === 'image/jpeg', 'replacement should match the target extension');
+    } finally {
+        removeTree($root);
+    }
+});
+
+test('pre-upload avatar is forced to a normalized JPEG', static function (): void {
+    $root = sys_get_temp_dir() . '/kvs-avatar-pre-ok-' . bin2hex(random_bytes(4));
+    $storage = $root . '/private';
+    mkdir($storage, 0777, true);
+    $upload = $root . '/php-upload';
+    fixturePng($upload);
+    try {
+        $result = uploadModerator($storage, moderationResponse(false, ['sexual' => false]))->moderate($upload, 1001);
+        $size = getimagesize($upload);
+        assertTrue($result['status'] === 'approved', 'pre-upload avatar should be approved');
+        assertTrue((new finfo(FILEINFO_MIME_TYPE))->file($upload) === 'image/jpeg', 'pre-upload output should be JPEG');
+        assertTrue(is_array($size) && $size[0] === 64 && $size[1] === 64, 'pre-upload avatar should be square');
+    } finally {
+        removeTree($root);
+    }
+});
+
+test('pre-upload invalid data is quarantined and replaced', static function (): void {
+    $root = sys_get_temp_dir() . '/kvs-avatar-pre-invalid-' . bin2hex(random_bytes(4));
+    $storage = $root . '/private';
+    mkdir($storage, 0777, true);
+    $upload = $root . '/php-upload';
+    file_put_contents($upload, '<svg onload="alert(1)"></svg>');
+    try {
+        $result = uploadModerator($storage, moderationResponse(false))->moderate($upload, 1002);
+        assertTrue($result['status'] === 'invalid_replaced', 'invalid pre-upload should be replaced');
+        assertTrue(is_file($storage . '/' . $result['quarantine_path']), 'invalid pre-upload should be quarantined');
+        assertTrue((new finfo(FILEINFO_MIME_TYPE))->file($upload) === 'image/jpeg', 'invalid pre-upload replacement should be JPEG');
+    } finally {
+        removeTree($root);
+    }
+});
+
+test('pre-upload API failure publishes a pending JPEG', static function (): void {
+    $root = sys_get_temp_dir() . '/kvs-avatar-pre-retry-' . bin2hex(random_bytes(4));
+    $storage = $root . '/private';
+    mkdir($storage, 0777, true);
+    $upload = $root . '/php-upload';
+    fixturePng($upload);
+    try {
+        $result = uploadModerator($storage, new RuntimeException('simulated outage'))->moderate($upload, 1003);
+        assertTrue($result['status'] === 'review_required', 'pre-upload failure should require review');
+        assertTrue(is_file($storage . '/' . $result['retry_source']), 'pre-upload retry source should be quarantined');
+        assertTrue((new finfo(FILEINFO_MIME_TYPE))->file($upload) === 'image/jpeg', 'pending pre-upload replacement should be JPEG');
     } finally {
         removeTree($root);
     }
